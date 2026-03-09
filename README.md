@@ -1,4 +1,4 @@
-# Food Delivery as a Tool Against Food Deserts (CS418 Fall 2025)
+# Geospatial Analysis of Urban Food Deserts
 
 A graduate-level data science project analyzing food deserts in Chicago using USDA Food Access Atlas, SNAP participation, ACS broadband adoption, and City of Chicago grocery locations. We test five hypotheses on spatial clustering, affordability, income disparity, and digital access, producing geospatial visuals, ML models, and a Digital Barrier Index.
 
