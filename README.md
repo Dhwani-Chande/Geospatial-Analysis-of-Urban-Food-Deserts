@@ -1,6 +1,6 @@
 # Geospatial Analysis of Urban Food Deserts
 
-[![Live Demo](https://img.shields.io/badge/Live%20Demo-D3%20Explorer-c8400a?style=for-the-badge&logo=github)](https://dhwani-chande.github.io/Food-Delivery-as-a-Tool-Against-Food-Deserts)
+[![Live Demo]](https://dhwani-chande.github.io/Food-Delivery-as-a-Tool-Against-Food-Deserts)
 
 
 > **Can food delivery apps solve Chicago's food desert crisis — or do deeper barriers of income and digital access remain?**
