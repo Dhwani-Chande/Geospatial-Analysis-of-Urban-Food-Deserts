@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chicago Food Desert — D3 Explorer</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --ink:#0a0c09;--paper:#f2ede0;--rust:#c8400a;--amber:#e9c46a;
+  --forest:#2d6a4f;--blue:#264653;--muted:#7a7060;--card:#141610;
+  --border:#1e2119;--cream:#ece7da;--dim:#0d0f0b;
+}
+html,body{width:100%;height:100%;background:var(--ink);color:var(--paper);
+  font-family:'IBM Plex Sans',sans-serif;overflow:hidden}
+header{display:flex;align-items:flex-end;justify-content:space-between;
+  padding:14px 28px 12px;border-bottom:1px solid var(--border);position:relative;flex-shrink:0}
+header::before{content:'';position:absolute;top:0;left:0;width:4px;height:100%;background:var(--rust)}
+.h-title{font-family:'Syne',sans-serif;font-size:clamp(13px,1.6vw,20px);
+  font-weight:800;letter-spacing:-.02em;line-height:1.1}
+.h-title span{color:var(--rust)}
+.h-sub{font-family:'IBM Plex Mono',monospace;font-size:8px;color:var(--muted);
+  letter-spacing:.1em;margin-top:3px;text-transform:uppercase}
+.h-stats{display:flex;gap:18px}
+.hs .n{font-family:'Syne',sans-serif;font-size:17px;font-weight:700;color:var(--amber);line-height:1}
+.hs .l{font-size:8px;color:var(--muted);font-family:'IBM Plex Mono',monospace;
+  text-transform:uppercase;letter-spacing:.08em;margin-top:2px}
+.map-controls{position:absolute;top:8px;right:8px;z-index:10;display:flex;gap:5px;flex-direction:column;align-items:flex-end}
+.ctrl-btn{background:rgba(10,12,9,.9);border:1px solid var(--border);color:var(--muted);
+  font-family:'IBM Plex Mono',monospace;font-size:8px;letter-spacing:.08em;text-transform:uppercase;
+  padding:4px 9px;cursor:pointer;transition:all .2s;white-space:nowrap}
+.ctrl-btn:hover{color:var(--paper);border-color:var(--muted)}
+.ctrl-btn.active{color:var(--amber);border-color:var(--amber);background:rgba(233,196,106,.08)}
+.layout{display:grid;grid-template-columns:1fr 340px;grid-template-rows:1fr 170px;height:calc(100vh - 68px)}
+.map-panel{position:relative;border-right:1px solid var(--border);border-bottom:1px solid var(--border);
+  overflow:hidden;background:#0d0f0b;grid-row:1;grid-column:1}
+.map-panel svg{width:100%;height:100%}
+.tract{stroke:#1a1d18;stroke-width:.4;transition:opacity .2s;cursor:pointer}
+.tract:hover{stroke:var(--paper);stroke-width:1.2}
+.tract.dimmed{opacity:.1}
+.tract.highlighted{stroke:var(--paper);stroke-width:.8}
+.map-label{font-family:'IBM Plex Mono',monospace;font-size:8px;fill:rgba(242,237,224,.35);
+  pointer-events:none;text-anchor:middle}
+.map-hint{position:absolute;top:8px;left:50%;transform:translateX(-50%);
+  font-family:'IBM Plex Mono',monospace;font-size:8px;color:var(--muted);
+  letter-spacing:.1em;text-transform:uppercase;background:rgba(10,12,9,.8);
+  padding:4px 9px;border:1px solid var(--border);pointer-events:none;white-space:nowrap}
+.map-legend{position:absolute;bottom:10px;left:10px;background:rgba(10,12,9,.9);
+  border:1px solid var(--border);padding:9px 11px}
+.leg-title{font-family:'IBM Plex Mono',monospace;font-size:7.5px;color:var(--muted);
+  letter-spacing:.1em;text-transform:uppercase;margin-bottom:5px}
+.leg-row{display:flex;align-items:center;gap:6px;margin-bottom:3px;font-size:9px;color:var(--cream)}
+.leg-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+#dbi-legend{position:absolute;bottom:10px;right:10px;background:rgba(10,12,9,.9);
+  border:1px solid var(--border);padding:9px 11px;display:none}
+.dbi-grad{width:110px;height:7px;border-radius:2px;margin:5px 0 3px;
+  background:linear-gradient(to right,#0d1117,#264653,#c8400a,#e9c46a)}
+.dbi-labels{display:flex;justify-content:space-between;
+  font-family:'IBM Plex Mono',monospace;font-size:7.5px;color:var(--muted)}
+.bottom-left{grid-row:2;grid-column:1;border-right:1px solid var(--border);
+  display:grid;grid-template-columns:1fr 1fr;overflow:hidden}
+.slider-panel{border-right:1px solid var(--border);padding:12px 15px;display:flex;flex-direction:column;gap:8px}
+.snap-panel{padding:12px 14px;display:flex;flex-direction:column;gap:5px}
+.panel-title{font-family:'IBM Plex Mono',monospace;font-size:8px;color:var(--muted);
+  letter-spacing:.1em;text-transform:uppercase}
+input[type=range]{-webkit-appearance:none;width:100%;height:3px;background:var(--border);
+  border-radius:2px;outline:none;cursor:pointer}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:13px;
+  border-radius:50%;background:var(--rust);cursor:pointer;border:2px solid var(--ink)}
+.slider-val{font-family:'Syne',sans-serif;font-size:15px;font-weight:700;color:var(--amber)}
+.s-bar-row{display:flex;align-items:center;gap:6px;font-family:'IBM Plex Mono',monospace;
+  font-size:7.5px;color:var(--muted)}
+.s-bar-track{flex:1;height:4px;background:var(--border);border-radius:2px;overflow:hidden}
+.s-bar-fill{height:100%;border-radius:2px;transition:width .35s ease}
+.s-bar-label{width:24px;text-align:right;color:var(--paper)}
+.right-panel{grid-row:1/3;grid-column:2;display:flex;flex-direction:column;overflow:hidden}
+.cluster-panel{flex:1 1 0;position:relative;border-bottom:1px solid var(--border);min-height:0;overflow:hidden}
+.cluster-panel svg{width:100%;height:100%}
+.cluster-hint{position:absolute;top:8px;left:10px;font-family:'IBM Plex Mono',monospace;
+  font-size:8px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase}
+.bubble{cursor:pointer;transition:opacity .25s}
+.bubble.dimmed{opacity:.13}
+.info-panel{flex:0 0 auto;padding:12px 14px;min-height:185px;background:#0d0f0b;overflow-y:auto}
+.info-title{font-family:'Syne',sans-serif;font-size:11px;font-weight:700;color:var(--paper);
+  margin-bottom:7px;display:flex;align-items:center;gap:6px}
+.info-dot{width:7px;height:7px;border-radius:50%;display:inline-block;flex-shrink:0}
+.info-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px}
+.info-cell{background:var(--card);border:1px solid var(--border);padding:6px 8px}
+.ic-val{font-family:'Syne',sans-serif;font-size:14px;font-weight:700;line-height:1}
+.ic-lbl{font-family:'IBM Plex Mono',monospace;font-size:7px;color:var(--muted);
+  text-transform:uppercase;letter-spacing:.08em;margin-top:2px}
+.info-bar-row{display:flex;align-items:center;gap:6px;margin-top:7px;
+  font-family:'IBM Plex Mono',monospace;font-size:7.5px;color:var(--muted);
+  text-transform:uppercase;letter-spacing:.08em}
+.info-bar-track{flex:1;height:3px;background:var(--border);border-radius:2px;overflow:hidden}
+.info-bar-fill{height:100%;border-radius:2px;transition:width .4s ease}
+.info-bar-val{width:26px;text-align:right;color:var(--paper)}
+.info-default{font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--muted);line-height:1.75}
+.info-default em{color:var(--amber);font-style:normal}
+#tooltip{position:fixed;pointer-events:none;background:rgba(10,12,9,.95);
+  border:1px solid var(--border);padding:7px 11px;font-size:9.5px;
+  font-family:'IBM Plex Mono',monospace;color:var(--paper);line-height:1.65;
+  z-index:100;opacity:0;transition:opacity .15s;max-width:175px}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <div class="h-title">Chicago Food Desert <span>D3 Explorer</span></div>
+    <div class="h-sub">Cook County · 800+ tracts · USDA Food Atlas 2019 · CS418</div>
+  </div>
+  <div class="h-stats">
+    <div class="hs"><div class="n">18.4%</div><div class="l">Food deserts</div></div>
+    <div class="hs"><div class="n">$20.7k</div><div class="l">Income gap</div></div>
+    <div class="hs"><div class="n">K=4</div><div class="l">Clusters</div></div>
+    <div class="hs"><div class="n">0.871</div><div class="l">Best AUC</div></div>
+  </div>
+</header>
+
+<div class="layout">
+  <div class="map-panel" id="map-panel">
+    <div class="map-hint" id="map-hint">Click cluster → highlight · Hover tract → stats · Toggle map mode top-right</div>
+    <svg id="map-svg"></svg>
+    <div class="map-controls">
+      <button class="ctrl-btn active" id="btn-cluster" onclick="setMapMode('cluster')">Cluster View</button>
+      <button class="ctrl-btn" id="btn-dbi" onclick="setMapMode('dbi')">DBI Heatmap</button>
+      <button class="ctrl-btn" id="btn-fd" onclick="setMapMode('fd')">Food Desert</button>
+    </div>
+    <div class="map-legend" id="map-legend">
+      <div class="leg-title">K-Means Cluster</div>
+      <div class="leg-row"><div class="leg-dot" style="background:#c8400a"></div>Cluster 0 · Severely Disadvantaged</div>
+      <div class="leg-row"><div class="leg-dot" style="background:#2d6a4f"></div>Cluster 1 · Moderate Access</div>
+      <div class="leg-row"><div class="leg-dot" style="background:#e9c46a"></div>Cluster 2 · Most Affluent</div>
+      <div class="leg-row"><div class="leg-dot" style="background:#264653"></div>Cluster 3 · High FD Rate</div>
+      <div style="border-top:1px solid var(--border);margin:5px 0 4px"></div>
+      <div class="leg-row"><div class="leg-dot" style="background:#c8400a;opacity:.9"></div>Food Desert Tract (brighter)</div>
+    </div>
+    <div id="dbi-legend">
+      <div class="leg-title">Digital Barrier Index</div>
+      <div class="dbi-grad"></div>
+      <div class="dbi-labels"><span>Low barrier</span><span>High barrier</span></div>
+      <div style="margin-top:5px;font-size:8px;color:var(--muted);font-family:'IBM Plex Mono',monospace;line-height:1.5">
+        DBI = −broadband + seniors<br>+ SNAP reliance + no vehicle
+      </div>
+    </div>
+  </div>
+
+  <div class="bottom-left">
+    <div class="slider-panel">
+      <div class="panel-title">Income Threshold Explorer</div>
+      <input type="range" id="income-slider" min="20000" max="130000" step="2500" value="50000">
+      <div style="display:flex;align-items:baseline;gap:6px">
+        <div class="slider-val" id="slider-display">$50,000</div>
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:7.5px;color:var(--muted)">threshold</div>
+      </div>
+      <div id="slider-result" style="font-family:'IBM Plex Mono',monospace;font-size:8.5px;color:var(--muted);line-height:1.6"></div>
+      <div id="slider-bar-wrap" style="display:flex;flex-direction:column;gap:5px"></div>
+    </div>
+    <div class="snap-panel">
+      <div class="panel-title">SNAP Participation · Cook County 2015→2025</div>
+      <svg id="snap-svg" style="flex:1;min-height:0"></svg>
+    </div>
+  </div>
+
+  <div class="right-panel">
+    <div class="cluster-panel" id="cluster-panel">
+      <div class="cluster-hint">K-Means Clusters (K=4) — click to filter map</div>
+      <svg id="cluster-svg"></svg>
+    </div>
+    <div class="info-panel">
+      <div class="info-title">
+        <span class="info-dot" id="info-dot" style="background:var(--muted)"></span>
+        <span id="info-name">Select a cluster or hover a tract</span>
+      </div>
+      <div id="info-body">
+        <div class="info-default">
+          <em>Click a cluster bubble</em> to highlight<br>matching tracts on the map.<br><br>
+          <em>Hover any tract</em> to see its stats.<br><br>
+          <em>Top-right buttons</em> toggle between<br>Cluster / DBI Heatmap / Food Desert views.
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="tooltip"></div>
+
+<script>
+const rng=(seed=>{let s=seed;return()=>{s=(s*16807)%2147483647;return(s-1)/2147483646};})(42);
+
+const CM=[
+  {id:0,name:"Cluster 0",label:"Severely\nDisadvantaged",color:"#c8400a",
+   income:31520,poverty:41.95,fdRate:.78,noVehicle:41.85,snap:34.2,broadband:58,tracts:142,
+   desc:"Highest food desert concentration. South/West Side. Low income, low broadband, high SNAP reliance."},
+  {id:1,name:"Cluster 1",label:"Moderate\nAccess",color:"#2d6a4f",
+   income:59690,poverty:16.76,fdRate:.09,noVehicle:14.2,snap:11.4,broadband:71,tracts:218,
+   desc:"Mixed areas with moderate food access. Near North/Northwest suburbs."},
+  {id:2,name:"Cluster 2",label:"Most\nAffluent",color:"#e9c46a",
+   income:127202,poverty:7.11,fdRate:.00,noVehicle:8.1,snap:4.2,broadband:83,tracts:198,
+   desc:"Highest income, zero food deserts. Lincoln Park, Lakeview, Gold Coast, North Shore suburbs."},
+  {id:3,name:"Cluster 3",label:"High FD\nRate",color:"#264653",
+   income:53833,poverty:21.39,fdRate:.117,noVehicle:19.4,snap:18.7,broadband:64,tracts:262,
+   desc:"Highest food desert proportion. South Side & inner-ring suburbs. Moderate income, poor store access."},
+];
+
+const REGIONS=[
+  // Cluster 0: SW corner — Englewood, Austin, Lawndale
+  {c:0,xMin:.04,xMax:.42,yMin:.52,yMax:.97,count:142},
+  // Cluster 1: NW — Humboldt, Logan Sq, suburbs
+  {c:1,xMin:.04,xMax:.52,yMin:.04,yMax:.50,count:218},
+  // Cluster 2: NE lakefront — Lincoln Park, Gold Coast, North Shore
+  {c:2,xMin:.50,xMax:.80,yMin:.04,yMax:.55,count:198},
+  // Cluster 3: SE + far south — Hyde Park, Auburn Gresham, south suburbs
+  {c:3,xMin:.42,xMax:.80,yMin:.52,yMax:.97,count:262},
+];
+
+function hood(x,y){
+  if(x>.55&&y<.25)return"Rogers Park / Evanston";
+  if(x>.5&&y<.38)return"Lincoln Park / Lakeview";
+  if(x>.55&&y<.52)return"Near North / Gold Coast";
+  if(x>.55&&y<.65)return"South Loop / Hyde Park";
+  if(x>.55&&y<.80)return"South Shore / Chatham";
+  if(x>.5&&y>=.80)return"Auburn Gresham / Roseland";
+  if(x<.22&&y>.75)return"Englewood / W. Englewood";
+  if(x<.30&&y>.60)return"N. Lawndale / Little Village";
+  if(x<.30&&y>.45)return"Austin / Garfield Park";
+  if(x<.35&&y<.38)return"Humboldt Park / Logan Sq.";
+  if(x<.25&&y<.22)return"Portage Park / Irving Park";
+  return"Inner Ring Suburbs";
+}
+
+const TRACTS=[];
+for(const {c,xMin,xMax,yMin,yMax,count} of REGIONS){
+  const m=CM[c];
+  for(let i=0;i<count;i++){
+    const xF=xMin+rng()*(xMax-xMin),yF=yMin+rng()*(yMax-yMin);
+    const income=Math.round(m.income*(0.7+rng()*0.6));
+    const poverty=Math.min(65,Math.round(m.poverty*(0.6+rng()*0.8)*10)/10);
+    const snap=Math.min(50,Math.round(m.snap*(0.6+rng()*0.8)*10)/10);
+    const bb=Math.min(95,Math.max(45,Math.round(m.broadband+(rng()-.5)*20)));
+    const senior=Math.min(30,Math.max(5,Math.round(10+(rng()-.5)*12)));
+    const noVeh=Math.min(55,Math.max(3,Math.round(m.noVehicle*(0.6+rng()*0.8)*10)/10));
+    const dbi=Math.max(0,Math.min(1,((-bb+80)/30)*.3+(senior/30)*.15+(snap/50)*.35+(noVeh/55)*.2));
+    const isDesert=rng()<m.fdRate;
+    TRACTS.push({id:TRACTS.length,cluster:c,xF,yF,income,poverty,snap,broadband:bb,
+      senior,noVehicle:noVeh,dbi,isDesert,neighborhood:hood(xF,yF)});
+  }
+}
+
+let activeCluster=null,mapMode='cluster',mapCircles;
+
+const dbiScale=d3.scaleSequential().domain([0,1])
+  .interpolator(d3.interpolateRgbBasis(['#0d1117','#264653','#c8400a','#e9c46a']));
+
+function tractColor(d){
+  if(mapMode==='dbi')return dbiScale(d.dbi);
+  if(mapMode==='fd')return d.isDesert?'#c8400a':'#1a2218';
+  const base=CM[d.cluster].color;
+  return d.isDesert?d3.interpolate(base,'#ff7040')(.35):base;
+}
+function tractOpacity(d){
+  if(mapMode==='dbi')return .85;
+  if(mapMode==='fd')return d.isDesert?.92:.2;
+  return d.isDesert?.92:.52;
+}
+
+function buildMap(){
+  const el=document.getElementById('map-panel');
+  const svg=d3.select('#map-svg');svg.selectAll('*').remove();
+  const W=el.clientWidth,H=el.clientHeight;
+  const MW=W*.92;  // tracts use 92% — lake is just a sliver
+
+  // Chicago county outline (subtle polygon)
+  const outline=[[.06,.04],[.74,.04],[.82,.16],[.86,.32],[.86,.58],
+    [.78,.74],[.74,.96],[.28,.96],[.10,.84],[.04,.62],[.04,.28],[.06,.04]];
+  svg.append('polygon')
+    .attr('points',outline.map(([x,y])=>`${x*MW},${y*H}`).join(' '))
+    .attr('fill','#111410').attr('stroke','#252a22').attr('stroke-width',1.2);
+
+  // Subtle grid
+  [.33,.67].forEach(v=>{
+    svg.append('line').attr('x1',0).attr('x2',MW).attr('y1',v*H).attr('y2',v*H)
+      .attr('stroke','#171b15').attr('stroke-width',.6).attr('stroke-dasharray','3,8');
+    svg.append('line').attr('x1',v*MW).attr('x2',v*MW).attr('y1',0).attr('y2',H)
+      .attr('stroke','#171b15').attr('stroke-width',.6).attr('stroke-dasharray','3,8');
+  });
+
+  // Lake Michigan — narrow right strip
+  svg.append('rect').attr('x',MW).attr('y',0)
+    .attr('width',W-MW).attr('height',H*.80)
+    .attr('fill','#07121e').attr('opacity',1);
+  svg.append('line').attr('x1',MW).attr('y1',0).attr('x2',MW).attr('y2',H*.80)
+    .attr('stroke','#163352').attr('stroke-width',2);
+  svg.append('text').attr('x',MW+(W-MW)/2).attr('y',H*.35)
+    .attr('class','map-label').attr('font-style','italic')
+    .attr('font-size',8).attr('writing-mode','tb').text('Lake Mich.');
+
+  // Tracts — larger dots, clearer
+  mapCircles=svg.append('g').selectAll('circle').data(TRACTS).enter().append('circle')
+    .attr('class','tract')
+    .attr('cx',d=>d.xF*MW)
+    .attr('cy',d=>d.yF*H)
+    .attr('r',5.0)
+    .attr('fill',tractColor)
+    .attr('opacity',tractOpacity)
+    .on('mouseenter',(e,d)=>{
+      d3.select(e.target).raise().attr('r',8).attr('opacity',1)
+        .attr('stroke','#f2ede0').attr('stroke-width',1.2);
+      showTractInfo(d);showTooltip(e,d);
+    })
+    .on('mousemove',e=>moveTooltip(e))
+    .on('mouseleave',(e,d)=>{
+      d3.select(e.target).attr('r',5.0).attr('opacity',tractOpacity(d))
+        .attr('stroke','#1a1d18').attr('stroke-width',.4);
+      hideTooltip();
+      if(activeCluster!==null)showClusterInfo(CM[activeCluster]);else showDefault();
+    });
+
+  // Neighborhood labels with dark pill backgrounds
+  const labels=[
+    {t:"Englewood",   x:.14, y:.82},
+    {t:"Austin",      x:.18, y:.62},
+    {t:"N. Lawndale", x:.26, y:.74},
+    {t:"Lincoln Park",x:.62, y:.22},
+    {t:"Hyde Park",   x:.64, y:.62},
+    {t:"Auburn Gresham",x:.64,y:.86},
+    {t:"Humboldt Pk", x:.22, y:.32},
+    {t:"Rogers Park", x:.62, y:.08},
+  ];
+  labels.forEach(lb=>{
+    const lx=lb.x*MW, ly=lb.y*H, tw=lb.t.length*5.0;
+    svg.append('rect').attr('x',lx-tw/2-5).attr('y',ly-10)
+      .attr('width',tw+10).attr('height',13).attr('rx',3)
+      .attr('fill','rgba(8,10,8,0.78)');
+    svg.append('text').attr('class','map-label').attr('x',lx).attr('y',ly).text(lb.t);
+  });
+
+  applyClusterFilter(activeCluster);
+}
+
+function refreshMapColors(){
+  if(!mapCircles)return;
+  mapCircles.transition().duration(600).attr('fill',tractColor).attr('opacity',tractOpacity);
+}
+
+function applyClusterFilter(cid){
+  if(!mapCircles)return;
+  mapCircles.classed('dimmed',d=>cid!==null&&d.cluster!==cid)
+            .classed('highlighted',d=>cid!==null&&d.cluster===cid);
+}
+
+window.setMapMode=function(mode){
+  mapMode=mode;
+  document.querySelectorAll('.ctrl-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('btn-'+mode).classList.add('active');
+  const show=(id,v)=>document.getElementById(id).style.display=v;
+  if(mode==='dbi'){
+    show('map-legend','none');show('dbi-legend','block');
+    document.getElementById('map-hint').textContent='DBI Heatmap — yellow = high digital barrier = more likely food desert';
+    activeCluster=null;applyClusterFilter(null);
+    d3.selectAll('.bubble').classed('dimmed',false);showDefault();
+  } else {
+    show('map-legend','block');show('dbi-legend','none');
+    document.getElementById('map-hint').textContent='Click cluster → highlight · Hover tract → stats';
+  }
+  refreshMapColors();
+  if(mode!=='dbi') updateSlider();
+};
+
+function buildCluster(){
+  const el=document.getElementById('cluster-panel');
+  const svg=d3.select('#cluster-svg');svg.selectAll('*').remove();
+  const W=el.clientWidth,H=el.clientHeight;
+  const cx=W/2,cy=H/2;
+  const rSc=d3.scaleSqrt().domain([0,d3.max(CM,d=>d.tracts)]).range([0,Math.min(W,H)*.20]);
+  // 2×2 grid starting positions — all well inside the panel
+  const initPos=[[W*.27,H*.28],[W*.73,H*.28],[W*.27,H*.72],[W*.73,H*.72]];
+  const nodes=CM.map((d,i)=>({...d,r:rSc(d.tracts),x:initPos[i][0],y:initPos[i][1]}));
+  const sim=d3.forceSimulation(nodes)
+    .force('center',d3.forceCenter(cx,cy).strength(.05))
+    .force('charge',d3.forceManyBody().strength(3))
+    .force('collision',d3.forceCollide(d=>d.r+6).strength(.95))
+    // keep inside bounds
+    .force('bound',()=>{
+      nodes.forEach(d=>{
+        d.x=Math.max(d.r+10, Math.min(W-d.r-10, d.x));
+        d.y=Math.max(d.r+10, Math.min(H-d.r-10, d.y));
+      });
+    })
+    .alphaDecay(.025);
+
+  const bub=svg.selectAll('.bubble').data(nodes).enter().append('g').attr('class','bubble')
+    .on('click',(e,d)=>{
+      if(mapMode==='dbi')return;
+      if(activeCluster===d.id){activeCluster=null;applyClusterFilter(null);
+        d3.selectAll('.bubble').classed('dimmed',false);showDefault();}
+      else{activeCluster=d.id;applyClusterFilter(d.id);
+        d3.selectAll('.bubble').classed('dimmed',dd=>dd.id!==d.id);showClusterInfo(d);}
+    });
+
+  // outer glow
+  bub.append('circle').attr('r',d=>d.r+6).attr('fill','none')
+    .attr('stroke',d=>d.color).attr('stroke-width',1.2).attr('opacity',.14);
+  // fill
+  bub.append('circle').attr('r',d=>d.r).attr('fill',d=>d.color)
+    .attr('fill-opacity',.15).attr('stroke',d=>d.color).attr('stroke-width',1.8);
+  // FD rate arc (bold indicator around rim)
+  bub.each(function(d){
+    d3.select(this).append('path')
+      .attr('d',d3.arc().innerRadius(d.r-6).outerRadius(d.r)
+        .startAngle(-Math.PI/2).endAngle(-Math.PI/2+Math.PI*2*d.fdRate)())
+      .attr('fill',d.color).attr('opacity',.92);
+  });
+  // cluster name
+  bub.append('text').attr('dy',d=>-(d.r*.38)).attr('fill',d=>d.color)
+    .attr('font-size',d=>d.r>55?10.5:9).attr('font-weight','500')
+    .attr('font-family',"'IBM Plex Mono',monospace").attr('text-anchor','middle').text(d=>d.name);
+  // tract count
+  bub.append('text').attr('fill','#f2ede0').attr('font-size',d=>d.r>55?20:15)
+    .attr('font-weight','700').attr('font-family',"'Syne',sans-serif")
+    .attr('text-anchor','middle').attr('dy',d=>d.r>55?6:4).text(d=>d.tracts);
+  // label
+  bub.append('text').attr('fill','#7a7060').attr('font-size',8)
+    .attr('font-family',"'IBM Plex Mono',monospace").attr('text-anchor','middle')
+    .attr('dy',d=>d.r>55?21:16).text('tracts');
+
+  sim.on('tick',()=>{
+    bub.attr('transform',d=>`translate(${d.x},${d.y})`);
+  });
+}
+
+/* INCOME SLIDER */
+const threshData=[
+  {v:20000,r:.72},{v:25000,r:.68},{v:30000,r:.62},{v:35000,r:.55},{v:40000,r:.48},
+  {v:45000,r:.41},{v:50000,r:.34},{v:55000,r:.27},{v:60000,r:.21},{v:65000,r:.17},
+  {v:70000,r:.13},{v:75000,r:.10},{v:80000,r:.08},{v:90000,r:.06},{v:100000,r:.04},
+  {v:110000,r:.03},{v:120000,r:.02},{v:130000,r:.01},
+];
+function getFdRate(income){
+  for(let i=0;i<threshData.length-1;i++){
+    if(income>=threshData[i].v&&income<threshData[i+1].v){
+      const t=(income-threshData[i].v)/(threshData[i+1].v-threshData[i].v);
+      return threshData[i].r+(threshData[i+1].r-threshData[i].r)*t;
+    }
+  }
+  if(income<=threshData[0].v)return threshData[0].r;
+  return threshData[threshData.length-1].r;
+}
+
+function updateSlider(){
+  const val=+document.getElementById('income-slider').value;
+  document.getElementById('slider-display').textContent='$'+d3.format(',.0f')(val);
+  const r=getFdRate(val),fdPct=Math.round(r*100),below=Math.round(r*800),above=800-below;
+  const col=r>.5?'#c8400a':r>.25?'#e9c46a':'#2d6a4f';
+  document.getElementById('slider-result').innerHTML=
+    `<strong style="color:${col}">${fdPct}%</strong> of tracts below this income are food deserts<br>
+     <span style="color:#7a7060">≈ ${below} tracts affected out of 800</span>`;
+  document.getElementById('slider-bar-wrap').innerHTML=
+    sBar('FD Rate',fdPct,100,col,'%')+sBar('Affected',below,800,col,'')+sBar('Has Access',above,800,'#2d6a4f','');
+  if(mapMode!=='dbi'&&mapCircles){
+    mapCircles.attr('fill',d=>d.income<=val?'#ff4010':tractColor(d))
+      .attr('opacity',d=>d.income<=val?(d.isDesert?.98:.7):tractOpacity(d));
+  }
+}
+function sBar(label,val,max,color,unit){
+  const pct=Math.min(100,(val/max)*100);
+  return`<div class="s-bar-row"><span style="width:58px;flex-shrink:0;font-size:7px">${label}</span>
+    <div class="s-bar-track"><div class="s-bar-fill" style="width:${pct}%;background:${color}"></div></div>
+    <span class="s-bar-label">${Math.round(val)}${unit}</span></div>`;
+}
+document.getElementById('income-slider').addEventListener('input',updateSlider);
+
+/* SNAP CHART */
+function buildSnapChart(){
+  const el=document.getElementById('snap-svg');
+  const pw=el.parentElement.clientWidth-28,ph=el.parentElement.clientHeight-36;
+  if(pw<20||ph<20)return;
+  el.setAttribute('width',pw);el.setAttribute('height',ph);
+  const svg=d3.select('#snap-svg');svg.selectAll('*').remove();
+  const data=[{y:'2015',fd:82,ac:312},{y:'2019',fd:95,ac:340},{y:'2025*',fd:114,ac:398}];
+  const mg={t:6,r:44,b:20,l:32};
+  const iW=pw-mg.l-mg.r,iH=ph-mg.t-mg.b;
+  const g=svg.append('g').attr('transform',`translate(${mg.l},${mg.t})`);
+  const x=d3.scaleBand().domain(data.map(d=>d.y)).range([0,iW]).padding(.3);
+  const y=d3.scaleLinear().domain([0,440]).range([iH,0]);
+  [100,200,300,400].forEach(v=>{
+    g.append('line').attr('x1',0).attr('x2',iW).attr('y1',y(v)).attr('y2',y(v))
+      .attr('stroke','#1e2119').attr('stroke-width',.5);
+    g.append('text').attr('x',-4).attr('y',y(v)+3).attr('text-anchor','end')
+      .attr('fill','#7a7060').attr('font-size',7).attr('font-family',"'IBM Plex Mono',monospace").text(v+'k');
+  });
+  const bw=x.bandwidth()/2.3;
+  [{key:'fd',color:'#c8400a'},{key:'ac',color:'#264653'}].forEach((s,si)=>{
+    const bars=g.selectAll(`.b${si}`).data(data).enter().append('rect').attr('class',`b${si}`)
+      .attr('x',d=>x(d.y)+si*(bw+1.5)).attr('y',iH).attr('width',bw)
+      .attr('fill',s.color).attr('opacity',.82).attr('height',0);
+    bars.transition().duration(700).delay((_,i)=>i*110+si*70)
+      .attr('y',d=>y(d[s.key])).attr('height',d=>iH-y(d[s.key]));
+    g.selectAll(`.l${si}`).data(data).enter().append('text').attr('class',`l${si}`)
+      .attr('x',d=>x(d.y)+si*(bw+1.5)+bw/2).attr('y',d=>y(d[s.key])-3)
+      .attr('text-anchor','middle').attr('fill',s.color).attr('font-size',7.5)
+      .attr('font-family',"'IBM Plex Mono',monospace").attr('opacity',0).text(d=>d[s.key]+'k')
+      .transition().duration(300).delay((_,i)=>i*110+si*70+600).attr('opacity',1);
+  });
+  data.forEach(d=>g.append('text').attr('x',x(d.y)+x.bandwidth()/2).attr('y',iH+13)
+    .attr('text-anchor','middle').attr('fill','#7a7060').attr('font-size',8.5)
+    .attr('font-family',"'IBM Plex Mono',monospace").text(d.y));
+  const leg=svg.append('g').attr('transform',`translate(${pw-mg.r+4},${mg.t})`);
+  [{l:'Food Desert',c:'#c8400a'},{l:'Has Access',c:'#264653'}].forEach((s,i)=>{
+    leg.append('rect').attr('y',i*13).attr('width',7).attr('height',7).attr('fill',s.c);
+    leg.append('text').attr('x',10).attr('y',i*13+7).attr('fill','#7a7060')
+      .attr('font-size',7.5).attr('font-family',"'IBM Plex Mono',monospace").text(s.l);
+  });
+}
+
+/* INFO PANEL */
+function fmt$(n){return'$'+d3.format(',.0f')(n)}
+function fmtP(n){return d3.format('.1f')(n)+'%'}
+function bar(label,val,max,color,unit='%'){
+  const pct=Math.min(100,(val/max)*100);
+  return`<div class="info-bar-row"><span style="width:72px;flex-shrink:0">${label}</span>
+    <div class="info-bar-track"><div class="info-bar-fill" style="width:${pct}%;background:${color}"></div></div>
+    <span class="info-bar-val">${Math.round(val)}${unit}</span></div>`;
+}
+function showClusterInfo(d){
+  document.getElementById('info-dot').style.background=d.color;
+  document.getElementById('info-name').textContent=`${d.name} — ${d.label.replace('\n',' ')}`;
+  document.getElementById('info-body').innerHTML=`
+    <div class="info-grid">
+      <div class="info-cell"><div class="ic-val" style="color:${d.color}">${fmt$(d.income)}</div><div class="ic-lbl">Median Income</div></div>
+      <div class="info-cell"><div class="ic-val" style="color:${d.color}">${Math.round(d.fdRate*100)}%</div><div class="ic-lbl">Food Desert Rate</div></div>
+      <div class="info-cell"><div class="ic-val" style="color:${d.color}">${fmtP(d.poverty)}</div><div class="ic-lbl">Poverty Rate</div></div>
+      <div class="info-cell"><div class="ic-val" style="color:${d.color}">${d.tracts}</div><div class="ic-lbl">Census Tracts</div></div>
+    </div>
+    ${bar('Broadband',d.broadband,100,d.color)}${bar('No Vehicle',d.noVehicle,55,d.color)}${bar('SNAP Share',d.snap,45,d.color)}
+    <div style="margin-top:8px;font-size:9px;color:var(--muted);font-family:'IBM Plex Sans',sans-serif;line-height:1.5">${d.desc}</div>`;
+}
+function showTractInfo(d){
+  const m=CM[d.cluster],col=d.isDesert?'#c8400a':m.color;
+  document.getElementById('info-dot').style.background=col;
+  document.getElementById('info-name').textContent=d.neighborhood+(d.isDesert?' · Food Desert':' · Has Access');
+  document.getElementById('info-body').innerHTML=`
+    <div class="info-grid">
+      <div class="info-cell"><div class="ic-val" style="color:${m.color}">${fmt$(d.income)}</div><div class="ic-lbl">Median Income</div></div>
+      <div class="info-cell"><div class="ic-val" style="color:${col}">${d.isDesert?'Yes':'No'}</div><div class="ic-lbl">Food Desert</div></div>
+      <div class="info-cell"><div class="ic-val" style="color:${m.color}">${fmtP(d.poverty)}</div><div class="ic-lbl">Poverty Rate</div></div>
+      <div class="info-cell"><div class="ic-val" style="color:${m.color}">${d.broadband}%</div><div class="ic-lbl">Broadband</div></div>
+    </div>
+    ${bar('DBI Score',Math.round(d.dbi*100),100,dbiScale(d.dbi))}${bar('SNAP Share',d.snap,45,m.color)}
+    <div style="margin-top:6px;font-family:'IBM Plex Mono',monospace;font-size:7.5px;color:var(--muted);letter-spacing:.08em;text-transform:uppercase">${m.name} · ${m.label.replace('\n',' ')}</div>`;
+}
+function showDefault(){
+  document.getElementById('info-dot').style.background='var(--muted)';
+  document.getElementById('info-name').textContent='Select a cluster or hover a tract';
+  document.getElementById('info-body').innerHTML=`<div class="info-default">
+    <em>Click a cluster bubble</em> to highlight<br>matching tracts on the map.<br><br>
+    <em>Hover any tract</em> to see its stats.<br><br>
+    <em>Top-right buttons</em> toggle between<br>Cluster / DBI Heatmap / Food Desert views.
+  </div>`;
+}
+
+/* TOOLTIP */
+const tip=document.getElementById('tooltip');
+function showTooltip(e,d){
+  tip.innerHTML=`<strong>${d.neighborhood}</strong><br>Income: ${fmt$(d.income)}<br>FD: ${d.isDesert?'<span style="color:#c8400a">Yes</span>':'<span style="color:#2d6a4f">No</span>'}<br>DBI: ${Math.round(d.dbi*100)} · BB: ${d.broadband}%`;
+  tip.style.opacity=1;moveTooltip(e);
+}
+function moveTooltip(e){
+  const x=e.clientX+14,y=e.clientY-10;
+  tip.style.left=(x+185>window.innerWidth?x-195:x)+'px';
+  tip.style.top=(y+80>window.innerHeight?y-85:y)+'px';
+}
+function hideTooltip(){tip.style.opacity=0}
+
+function init(){buildMap();buildCluster();buildSnapChart();updateSlider();}
+window.addEventListener('resize',()=>{activeCluster=null;init();showDefault();});
+document.querySelectorAll('.hs .n').forEach((el,i)=>{
+  el.style.opacity=0;el.style.transform='translateY(5px)';
+  el.style.transition=`opacity .4s ${i*.08}s ease,transform .4s ${i*.08}s ease`;
+  requestAnimationFrame(()=>{el.style.opacity=1;el.style.transform='none';});
+});
+init();
+</script>
+</body>
+</html>
